@@ -1,0 +1,125 @@
+from jogoteca import Jogo, Usuario
+
+SQL_DELETA_JOGO = 'delete from jogo where id = %s'
+SQL_JOGO_POR_ID = 'SELECT id, nome, categoria, console from jogo where id = %s'
+SQL_USUARIO_POR_ID = 'SELECT id, nome, senha from usuario where id = %s'
+SQL_ATUALIZA_JOGO = 'UPDATE jogo SET nome=%s, categoria=%s, console=%s where id = %s'
+SQL_BUSCA_JOGOS = 'SELECT id, nome, categoria, console from jogo'
+SQL_CRIA_JOGO = 'INSERT into jogo (nome, categoria, console) values (%s, %s, %s)'
+
+
+class JogoDao:
+    def __init__(self, db):
+        self.__db = db
+
+    def salvar(self, jogo):
+        cursor = self.__db.connection.cursor()
+
+        if (jogo.id):
+            cursor.execute(SQL_ATUALIZA_JOGO, (jogo.nome, jogo.categoria, jogo.console, jogo.id))
+        else:
+            cursor.execute(SQL_CRIA_JOGO, (jogo.nome, jogo.categoria, jogo.console))
+            jogo.id = cursor.lastrowid
+        self.__db.connection.commit()
+        return jogo
+
+    def listar(self):
+        cursor = self.__db.connection.cursor()
+        cursor.execute(SQL_BUSCA_JOGOS)
+        jogos = traduz_jogos(cursor.fetchall())
+        return jogos
+
+    def busca_por_id(self, id):
+        cursor = self.__db.connection.cursor()
+        cursor.execute(SQL_JOGO_POR_ID, (id,))
+        tupla = cursor.fetchone()
+        return Jogo(tupla[1], tupla[2], tupla[3], id=tupla[0])
+
+    def deletar(self, id):
+        self.__db.connection.cursor().execute(SQL_DELETA_JOGO, (id, ))
+        self.__db.connection.commit()
+
+
+class UsuarioDao:
+    def __init__(self, db):
+        self.__db = db
+
+    def buscar_por_id(self, id):
+        cursor = self.__db.connection.cursor()
+        cursor.execute(SQL_USUARIO_POR_ID, (id,))
+        dados = cursor.fetchone()
+        usuario = traduz_usuario(dados) if dados else None
+        return usuario
+
+
+def traduz_jogos(jogos):
+    def cria_jogo_com_tupla(tupla):
+        return Jogo(tupla[1], tupla[2], tupla[3], id=tupla[0])
+    return list(map(cria_jogo_com_tupla, jogos))
+
+
+def traduz_usuario(tupla):
+    return Usuario(tupla[0], tupla[1], tupla[2])
+
+import MySQLdb
+print('Conectando...')
+conn = MySQLdb.connect(user='root', passwd='admin', host='127.0.0.1', port=3306)
+
+# Descomente se quiser desfazer o banco...
+conn.cursor().execute("DROP DATABASE `jogoteca`;")
+conn.commit()
+
+criar_tabelas = '''SET NAMES utf8;
+    CREATE DATABASE `jogoteca` /*!40100 DEFAULT CHARACTER SET utf8 COLLATE utf8_bin */;
+    USE `jogoteca`;
+    CREATE TABLE `jogo` (
+      `id` int(11) NOT NULL AUTO_INCREMENT,
+      `nome` varchar(50) COLLATE utf8_bin NOT NULL,
+      `categoria` varchar(40) COLLATE utf8_bin NOT NULL,
+      `console` varchar(20) NOT NULL,
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+    CREATE TABLE `usuario` (
+      `id` varchar(8) COLLATE utf8_bin NOT NULL,
+      `nome` varchar(20) COLLATE utf8_bin NOT NULL,
+      `senha` varchar(8) COLLATE utf8_bin NOT NULL,
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;'''
+
+conn.cursor().execute(criar_tabelas)
+
+# inserindo usuarios
+cursor = conn.cursor()
+cursor.executemany(
+      'INSERT INTO jogoteca.usuario (id, nome, senha) VALUES (%s, %s, %s)',
+      [
+            ('luan', 'Luan Marques', 'flask'),
+            ('nico', 'Nico', '7a1'),
+            ('danilo', 'Danilo', 'vegas')
+      ])
+
+cursor.execute('select * from jogoteca.usuario')
+print(' -------------  Usuários:  -------------')
+for user in cursor.fetchall():
+    print(user[1])
+
+# inserindo jogos
+cursor.executemany(
+      'INSERT INTO jogoteca.jogo (nome, categoria, console) VALUES (%s, %s, %s)',
+      [
+            ('God of War 4', 'Ação', 'PS4'),
+            ('NBA 2k18', 'Esporte', 'Xbox One'),
+            ('Rayman Legends', 'Indie', 'PS4'),
+            ('Super Mario RPG', 'RPG', 'SNES'),
+            ('Super Mario Kart', 'Corrida', 'SNES'),
+            ('Fire Emblem Echoes', 'Estratégia', '3DS'),
+      ])
+
+cursor.execute('select * from jogoteca.jogo')
+print(' -------------  Jogos:  -------------')
+for jogo in cursor.fetchall():
+    print(jogo[1])
+
+# commitando senão nada tem efeito
+conn.commit()
+cursor.close()
